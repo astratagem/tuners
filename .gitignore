@@ -1,0 +1,41 @@
+# Template lock files
+/template/flake.lock
+/template/.config/flake.lock
+
+# Data/logs/testing
+.data
+*.log
+*.sql
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Secrets
+auth.json
+.env
+.env.*
+!.env.example
+.ssh
+*.key
+*.pem
+
+# Dependencies
+node_modules
+vendor
+
+# Context-specific
+*.cache
+*.local
+*.local.*
+*.local.*
+!*.local*.example
+.direnv
+.pre-commit-config.yaml
+
+# Build artifacts
+hot
+result
+target
+
+# Editor
+/.idea/

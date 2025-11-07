@@ -1,0 +1,38 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/CHANGELOG.md",
+      "!**/composer.lock",
+      "!**/*.min.*",
+      "!**/build/**",
+      "!**/dist/**",
+      "!**/vendor/**"
+    ]
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "useSortedAttributes": "on",
+        "useSortedProperties": "on"
+      }
+    }
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "useEditorconfig": true
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  }
+}
