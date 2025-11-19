@@ -15,8 +15,6 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             selected_idx,
         } => render_clusters(frame, clusters, *selected_idx),
         AppState::Error { message } => render_error(frame, message),
-        // FIXME: do something better
-        AppState::Idle => render_error(frame, "App is idle but don't worry!"),
     }
 }
 
@@ -40,7 +38,7 @@ fn render_scanning(
             "Scan complete.  Found {} audio files.\n\nPress Enter to continue...",
             files.len()
         )
-    } else if let Some(ref current_file) = current {
+    } else if let Some(current_file) = current {
         format!(
             "Found {} audio files so far...\n\nCurrently scanning: {}",
             files.len(),

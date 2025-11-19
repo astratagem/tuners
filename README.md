@@ -13,11 +13,12 @@ This is an early-stage scaffold demonstrating idiomatic Rust project structure f
 
 ### What Works Now
 
-- [ ] TUI interface with ratatui
-- [ ] Directory scanning for audio files
-- [ ] Metadata extraction from MP3, M4A, and FLAC files
-- [ ] Album clustering based on directory and tags
+- [x] TUI interface with ratatui
+- [x] Directory scanning for audio files
+- [x] Metadata extraction from MP3, M4A, and FLAC files
+- [x] Album clustering based on directory and tags
 - [ ] Interactive navigation with keyboard
+- [ ] Multi-disc albums
 
 ### What's Next
 

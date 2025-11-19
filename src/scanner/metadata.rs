@@ -60,12 +60,12 @@ fn extract_mp4(path: &Path) -> Result<AudioFile> {
         title: tag.title().map(String::from),
         album_artist: tag.album_artist().map(String::from),
         album: tag.album().map(String::from),
-        track_number: tag.track_number(),
-        total_tracks: tag.total_tracks(),
-        disc_number: tag.disc_number(),
-        total_discs: tag.total_discs(),
+        track_number: tag.track_number().and_then(|n| Some(n as u32)),
+        total_tracks: tag.total_tracks().and_then(|n| Some(n as u32)),
+        disc_number: tag.disc_number().and_then(|n| Some(n as u32)),
+        total_discs: tag.total_discs().and_then(|n| Some(n as u32)),
         genre: tag.genre().map(String::from),
-        duration: tag.duration(),
+        duration: Some(tag.duration().as_secs() as u32),
     })
 }
 
@@ -75,22 +75,22 @@ fn extract_flac(path: &Path) -> Result<AudioFile> {
 
     let artist = vorbis
         .and_then(|v| v.artist())
-        .and_then(|mut v| v.next())
+        .and_then(|v| v.iter().next())
         .map(String::from);
 
     let album_artist = vorbis
         .and_then(|v| v.album_artist())
-        .and_then(|mut v| v.next())
+        .and_then(|v| v.iter().next())
         .map(String::from);
 
     let album = vorbis
         .and_then(|v| v.album())
-        .and_then(|v| v.next())
+        .and_then(|v| v.iter().next())
         .map(String::from);
 
     let title = vorbis
         .and_then(|v| v.title())
-        .and_then(|mut t| t.next())
+        .and_then(|t| t.iter().next())
         .map(String::from);
 
     let track_number = vorbis.and_then(|v| v.track());

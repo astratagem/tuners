@@ -6,7 +6,7 @@ use ratatui::{prelude::CrosstermBackend, Terminal};
 
 use crate::{
     models::{AlbumCluster, AudioFile},
-    scanner,
+    scanner, ui,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(100);
@@ -40,31 +40,26 @@ enum ScanMessage {
     Error(String),
 }
 
-impl Default for App {
-    fn default() -> Self {
+impl App {
+    /// Constructs a new instance of [`App`].
+    pub fn new(path: PathBuf) -> Self {
         Self {
-            state: AppState::Idle,
+            state: AppState::Scanning {
+                path,
+                files_found: Vec::new(),
+                current_file: None,
+                is_complete: false,
+            },
             should_quit: false,
             scan_rx: None,
         }
     }
-}
-
-impl App {
-    /// Constructs a new instance of [`App`].
-    pub fn new(path: PathBuf) -> Self {
-        let mut app = Self::default();
-        app.state = AppState::Scanning {
-            path,
-            files_found: Vec::new(),
-            current_file: None,
-            is_complete: false,
-        };
-        app
-    }
 
     /// Run the main application loop.
-    pub fn run(&mut self, terminal: Terminal<CrosstermBackend<Stdout>>) -> color_eyre::Result<()> {
+    pub fn run(
+        &mut self,
+        mut terminal: Terminal<CrosstermBackend<Stdout>>,
+    ) -> color_eyre::Result<()> {
         self.start_scan();
 
         while !self.should_quit {
