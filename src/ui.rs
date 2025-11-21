@@ -25,13 +25,14 @@ fn render_scanning(
     current: &Option<String>,
     is_complete: bool,
 ) {
-    let chunks = vertical![==3, >=5, ==3].split(frame.area());
+    let [header_area, main_area, footer_area] = vertical![==3, >=5, ==3].areas(frame.area());
+
     let header = Paragraph::new(format!("Scanning: {}", path.display())).block(
         Block::default()
             .borders(Borders::ALL)
             .title("Directory Scanner"),
     );
-    frame.render_widget(header, chunks[0]);
+    frame.render_widget(header, header_area);
 
     let status = if is_complete {
         format!(
@@ -52,7 +53,7 @@ fn render_scanning(
         .block(Block::default().borders(Borders::ALL).title("Status"))
         .wrap(Wrap { trim: true });
 
-    frame.render_widget(content, chunks[1]);
+    frame.render_widget(content, main_area);
 
     let help = if is_complete {
         "<RET> : Continue to clusters... | q : Quit"
@@ -62,7 +63,7 @@ fn render_scanning(
 
     let footer = Paragraph::new(help).block(Block::default().borders(Borders::ALL));
 
-    frame.render_widget(footer, chunks[2]);
+    frame.render_widget(footer, footer_area);
 }
 
 fn render_clusters(
@@ -70,14 +71,14 @@ fn render_clusters(
     clusters: &[crate::models::AlbumCluster],
     selected_idx: usize,
 ) {
-    let chunks = vertical![==3, >=10, ==3].split(frame.area());
+    let [header_area, results_area, footer_area] = vertical![==3, >=10, ==3].areas(frame.area());
 
     let header = Paragraph::new(format!("Found {} album clusters", clusters.len())).block(
         Block::default()
             .borders(Borders::ALL)
             .title("Album Clusters"),
     );
-    frame.render_widget(header, chunks[0]);
+    frame.render_widget(header, header_area);
 
     let items: Vec<ListItem> = clusters
         .iter()
@@ -102,27 +103,27 @@ fn render_clusters(
         .highlight_symbol("» ");
     let mut state = ListState::default();
     state.select(Some(selected_idx));
-    frame.render_stateful_widget(list, chunks[1], &mut state);
+    frame.render_stateful_widget(list, results_area, &mut state);
 
     let help = Paragraph::new("j/k : Navigate | <RET> : Lookup (TODO) | q : Quit")
         .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(help, chunks[2]);
+    frame.render_widget(help, footer_area);
 }
 
 fn render_error(frame: &mut Frame, message: &str) {
-    let chunks = vertical![==3, >=5, ==3].split(frame.area());
+    let [header_area, main_area, footer_area] = vertical![==3, >=5, ==3].areas(frame.area());
 
     let header = Paragraph::new("Error")
         .block(Block::default().borders(Borders::ALL).title("Error"))
         .style(Style::default().fg(Color::Red));
-    frame.render_widget(header, chunks[0]);
+    frame.render_widget(header, header_area);
 
     let error = Paragraph::new(message)
         .block(Block::default().borders(Borders::ALL))
         .wrap(Wrap { trim: true })
         .style(Style::default().fg(Color::Red));
-    frame.render_widget(error, chunks[1]);
+    frame.render_widget(error, main_area);
 
     let footer = Paragraph::new("q : Quit").block(Block::default().borders(Borders::ALL));
-    frame.render_widget(footer, chunks[2]);
+    frame.render_widget(footer, footer_area);
 }
