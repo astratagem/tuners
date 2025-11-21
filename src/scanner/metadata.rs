@@ -6,7 +6,7 @@ use crate::{codecs::AudioCodec, models::AudioFile};
 
 use color_eyre::Result;
 use id3::TagLike;
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 /// Extract metadata from an audio file.
 pub fn extract(path: &Path) -> Result<AudioFile> {
@@ -41,7 +41,10 @@ fn extract_mp3(path: &Path) -> Result<AudioFile> {
         disc_number: tag.disc(),
         total_discs: tag.total_discs(),
         genre: tag.genre().map(String::from),
-        duration: tag.duration(),
+        duration: match tag.duration() {
+            Some(duration) => Some(Duration::from_secs(duration as u64)),
+            None => None,
+        },
     })
 }
 
@@ -59,7 +62,7 @@ fn extract_mp4(path: &Path) -> Result<AudioFile> {
         disc_number: tag.disc_number().and_then(|n| Some(n as u32)),
         total_discs: tag.total_discs().and_then(|n| Some(n as u32)),
         genre: tag.genre().map(String::from),
-        duration: Some(tag.duration().as_secs() as u32),
+        duration: Some(tag.duration()),
     })
 }
 
@@ -92,7 +95,7 @@ fn extract_flac(path: &Path) -> Result<AudioFile> {
 
     let duration = tag
         .get_streaminfo()
-        .map(|v| (v.total_samples / v.sample_rate as u64) as u32);
+        .map(|v| Duration::from_secs(v.total_samples / v.sample_rate as u64));
 
     Ok(AudioFile {
         path: path.to_path_buf(),

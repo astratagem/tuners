@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use crate::codecs::AudioCodec;
 
@@ -20,7 +20,7 @@ pub struct AudioFile {
     pub disc_number: Option<u32>,
     pub total_discs: Option<u32>,
     pub genre: Option<String>,
-    pub duration: Option<u32>,
+    pub duration: Option<Duration>,
 }
 
 /// A cluser of files that are likely to belong to the same album.

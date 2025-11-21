@@ -128,7 +128,8 @@ fn render_clusters(
                     it.track_number
                         .map_or(String::new(), |n| format!("{}. ", n.to_string())),
                     it.title.clone().unwrap_or_default(),
-                    it.duration.map_or(String::from("???"), |n| n.to_string()),
+                    it.duration
+                        .map_or(String::from("???"), |n| n.as_secs().to_string()),
                 ))
             })
             .collect();
