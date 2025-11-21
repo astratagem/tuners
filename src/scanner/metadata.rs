@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::{codecs::AudioCodec, models::AudioFile};
 
 use color_eyre::Result;

@@ -7,7 +7,7 @@ owner-name := "chris montgomery"
 owner-email := "chmont@protonmail.com"
 owner-attribution := owner-name + " <" + owner-email + ">"
 
-gpl3 := 'GPL-3.0-or-later'
+agpl3 := 'AGPL-3.0-or-later'
 docs-license := "CC-BY-SA-4.0"
 and := ' AND '
 
@@ -19,7 +19,6 @@ lint:
 [doc("Annotate a file")]
 annotate license +ARGS:
     reuse annotate \
-    --template compact \
     --copyright-prefix spdx-c \
     --license '{{license}}' \
     --copyright '{{owner-attribution}}' \
@@ -39,13 +38,13 @@ annotate-docs:
     just commons {}
 
 [doc: "License the specified files as GPL-3.0-or-later"]
-gpl +FILES: (annotate gpl3 FILES)
+gpl +FILES: (annotate agpl3 FILES)
 
 [doc: "Add a co-licensor to the specified files"]
 colicense license colicensor +FILES: (annotate (license) ('-c ' + quote(colicensor) + ' ' + FILES))
 
 [doc: "License the specified files under an additional license"]
-dual-license other-license +FILES: (annotate (gpl3 + and + other-license) FILES)
+dual-license other-license +FILES: (annotate (agpl3 + and + other-license) FILES)
 
 [doc: "License the specified files as documentation"]
 docs +FILES: (annotate docs-license FILES)

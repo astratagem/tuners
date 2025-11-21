@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Claude Code Context
 
 This document provides context for Claude Code when working on this project.

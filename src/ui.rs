@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::{app::AppState, codecs::codec_name};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_macros::vertical;

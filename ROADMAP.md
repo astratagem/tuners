@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Development Roadmap
 
 ## Project Overview

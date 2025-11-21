@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use std::{io::Stdout, path::PathBuf, sync::mpsc, thread, time::Duration};
 
 use color_eyre::eyre::Result;

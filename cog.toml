@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: (C) 2025 chris montgomery <chmont@protonmail.com>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 from_latest_tag = false
 ignore_merge_commits = true
 disable_changelog = false
