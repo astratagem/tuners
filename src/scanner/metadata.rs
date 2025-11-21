@@ -29,6 +29,7 @@ pub fn extract(path: &Path) -> Result<AudioFile> {
 
 fn extract_mp3(path: &Path) -> Result<AudioFile> {
     let tag = id3::Tag::read_from_path(path)?;
+    let duration = mp3_duration::from_path(path).ok();
     Ok(AudioFile {
         path: path.to_path_buf(),
         codec: AudioCodec::Mp3,
@@ -41,10 +42,7 @@ fn extract_mp3(path: &Path) -> Result<AudioFile> {
         disc_number: tag.disc(),
         total_discs: tag.total_discs(),
         genre: tag.genre().map(String::from),
-        duration: match tag.duration() {
-            Some(duration) => Some(Duration::from_secs(duration as u64)),
-            None => None,
-        },
+        duration,
     })
 }
 
