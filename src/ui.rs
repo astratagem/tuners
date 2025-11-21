@@ -6,6 +6,9 @@ use crate::{app::AppState, codecs::codec_name};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_macros::vertical;
 
+const SECONDS_PER_MINUTE: u32 = 60;
+const SECONDS_PER_HOUR: u32 = 3600;
+
 pub fn render(frame: &mut Frame, state: &AppState) {
     match state {
         AppState::Scanning {
@@ -129,7 +132,9 @@ fn render_clusters(
                         .map_or(String::new(), |n| format!("{}. ", n.to_string())),
                     it.title.clone().unwrap_or_default(),
                     it.duration
-                        .map_or(String::from("???"), |n| n.as_secs().to_string()),
+                        .map_or(String::from("???"), |n| seconds_to_timecode(
+                            n.as_secs() as u32
+                        )),
                 ))
             })
             .collect();
@@ -159,4 +164,20 @@ fn render_error(frame: &mut Frame, message: &str) {
 
     let footer = Paragraph::new("q : Quit").block(Block::default().borders(Borders::ALL));
     frame.render_widget(footer, footer_area);
+}
+
+pub fn seconds_to_timecode(seconds: u32) -> String {
+    let hours = seconds / SECONDS_PER_HOUR;
+    let minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE;
+    let seconds = seconds % SECONDS_PER_MINUTE;
+    format!(
+        "{}{:02}:{:02}",
+        if hours > 0 {
+            format!("{}:", hours)
+        } else {
+            String::new()
+        },
+        minutes,
+        seconds
+    )
 }
