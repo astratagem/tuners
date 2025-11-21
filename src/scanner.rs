@@ -59,8 +59,7 @@ pub fn cluster_files(files: Vec<AudioFile>) -> Vec<AlbumCluster> {
     clusters
         .into_iter()
         .map(|(key, mut tracks)| {
-            // FIXME: handle multi-disc
-            tracks.sort_by_key(|it| it.track_number);
+            tracks.sort_by_key(|it| (it.disc_number.unwrap_or(1), it.track_number.unwrap_or(0)));
             AlbumCluster {
                 album_artist: key.album_artist,
                 album: key.album,
