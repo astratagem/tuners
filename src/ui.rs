@@ -71,7 +71,8 @@ fn render_clusters(
     clusters: &[crate::models::AlbumCluster],
     selected_idx: usize,
 ) {
-    let [header_area, results_area, footer_area] = vertical![==3, >=10, ==3].areas(frame.area());
+    let [header_area, results_area, tracklist_area, footer_area] =
+        vertical![==3, >=10, ==12, ==3].areas(frame.area());
 
     let header = Paragraph::new(format!("Found {} album clusters", clusters.len())).block(
         Block::default()
@@ -104,6 +105,29 @@ fn render_clusters(
     let mut state = ListState::default();
     state.select(Some(selected_idx));
     frame.render_stateful_widget(list, results_area, &mut state);
+
+    let selected_cluster = clusters.get(selected_idx);
+    if selected_cluster.is_some() {
+        let tracklist: Vec<Line> = selected_cluster
+            .unwrap()
+            .tracks
+            .iter()
+            .map(|it| {
+                Line::raw(format!(
+                    "{}{}{} ({})\n",
+                    it.disc_number
+                        .map_or(String::new(), |n| format!("{}-", n.to_string())),
+                    it.track_number
+                        .map_or(String::new(), |n| format!("{}. ", n.to_string())),
+                    it.title.clone().unwrap_or_default(),
+                    it.duration.map_or(String::from("???"), |n| n.to_string()),
+                ))
+            })
+            .collect();
+        frame.render_widget(Paragraph::new(tracklist), tracklist_area);
+    } else {
+        frame.render_widget(Clear, tracklist_area);
+    }
 
     let help = Paragraph::new("j/k : Navigate | <RET> : Lookup (TODO) | q : Quit")
         .block(Block::default().borders(Borders::ALL));
