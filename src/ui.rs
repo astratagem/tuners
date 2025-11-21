@@ -126,10 +126,14 @@ fn render_clusters(
             .map(|it| {
                 Line::raw(format!(
                     "{}{}{} ({})\n",
-                    it.disc_number
-                        .map_or(String::new(), |n| format!("{}-", n.to_string())),
+                    it.disc_number.map_or(String::new(), |n| {
+                        if it.total_discs.unwrap_or(1) <= 1 {
+                            return String::new();
+                        }
+                        format!("{:02}-", n)
+                    }),
                     it.track_number
-                        .map_or(String::new(), |n| format!("{}. ", n.to_string())),
+                        .map_or(String::new(), |n| format!("{:02}. ", n)),
                     it.title.clone().unwrap_or_default(),
                     it.duration
                         .map_or(String::from("???"), |n| seconds_to_timecode(
