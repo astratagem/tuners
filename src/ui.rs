@@ -1,4 +1,4 @@
-use crate::app::AppState;
+use crate::{app::AppState, codecs::codec_name};
 use ratatui::{prelude::*, widgets::*};
 use ratatui_macros::vertical;
 
@@ -85,9 +85,13 @@ fn render_clusters(
         .iter()
         .map(|it| {
             ListItem::new(format!(
-                "{} - {} ({} tracks) [{}]",
+                "{} - {} [{}] ({} tracks) [{}]",
                 it.album_artist,
                 it.album,
+                match it.codec() {
+                    Some(codec) => codec_name(codec),
+                    None => String::from("Mutt"),
+                },
                 it.track_count(),
                 it.base_path.display()
             ))

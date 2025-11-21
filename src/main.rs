@@ -5,6 +5,7 @@ use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
 
 mod app;
+mod codecs;
 mod models;
 mod scanner;
 mod ui;

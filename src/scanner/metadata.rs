@@ -1,4 +1,4 @@
-use crate::models::AudioFile;
+use crate::{codecs::AudioCodec, models::AudioFile};
 
 use color_eyre::Result;
 use id3::TagLike;
@@ -16,20 +16,8 @@ pub fn extract(path: &Path) -> Result<AudioFile> {
         "mp3" => extract_mp3(path)?,
         "m4a" => extract_mp4(path)?,
         "flac" => extract_flac(path)?,
-        // TODO: provide some kind of logging for these, or prompt?
-        _ => AudioFile {
-            path: path.to_path_buf(),
-            title: None,
-            artist: None,
-            album_artist: None,
-            album: None,
-            track_number: None,
-            total_tracks: None,
-            disc_number: None,
-            total_discs: None,
-            genre: None,
-            duration: None,
-        },
+        // FIXME: provide some kind of logging for these, or prompt?
+        _ => todo!(),
     };
 
     Ok(res)
@@ -39,6 +27,7 @@ fn extract_mp3(path: &Path) -> Result<AudioFile> {
     let tag = id3::Tag::read_from_path(path)?;
     Ok(AudioFile {
         path: path.to_path_buf(),
+        codec: AudioCodec::Mp3,
         artist: tag.artist().map(String::from),
         title: tag.title().map(String::from),
         album_artist: tag.album_artist().map(String::from),
@@ -56,6 +45,7 @@ fn extract_mp4(path: &Path) -> Result<AudioFile> {
     let tag = mp4ameta::Tag::read_from_path(path)?;
     Ok(AudioFile {
         path: path.to_path_buf(),
+        codec: AudioCodec::Mp4,
         artist: tag.artist().map(String::from),
         title: tag.title().map(String::from),
         album_artist: tag.album_artist().map(String::from),
@@ -102,6 +92,7 @@ fn extract_flac(path: &Path) -> Result<AudioFile> {
 
     Ok(AudioFile {
         path: path.to_path_buf(),
+        codec: AudioCodec::Flac,
         title,
         artist,
         album_artist,

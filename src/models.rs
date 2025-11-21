@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
+use crate::codecs::AudioCodec;
+
 /// A single audio file with extracted metadata.
 #[derive(Debug, Clone)]
 pub struct AudioFile {
     pub path: PathBuf,
+    pub codec: AudioCodec,
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album_artist: Option<String>,
@@ -32,5 +35,15 @@ pub struct AlbumCluster {
 impl AlbumCluster {
     pub fn track_count(&self) -> usize {
         self.tracks.len()
+    }
+
+    /// Get the audio codec shared by all files in the cluster, if any.
+    pub fn codec(&self) -> Option<AudioCodec> {
+        let first_track = self.tracks.first()?;
+        let codec = first_track.codec.clone();
+        if !self.tracks.iter().all(|it| it.codec == codec) {
+            return None;
+        }
+        Some(codec)
     }
 }
