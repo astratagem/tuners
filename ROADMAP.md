@@ -53,13 +53,16 @@ Validate the three riskiest assumptions:
 ### Deliverables
 
 - [x] TUI scaffold with ratatui
-- [x] Directory scanning and clustering
-- [x] Tag reading (MP3, M4A, FLAC)
+- [x] Directory scanning and clustering (with parallel processing via rayon)
+- [x] Tag reading (MP3, M4A, FLAC) with duration calculation
+- [x] Multi-disc album support
+- [x] Cluster detail view with track listings
 - [ ] MusicBrainz integration via musicbrainz_rs
-- [ ] Fuzzy matching/scoring algorithm
-- [ ] Interactive match selection UI
-- [ ] Track mapping review screen
-- [ ] Dry-run output (what would be written)
+- [ ] Similarity scoring algorithm (0-100%, weighted by artist/album/tracks)
+- [ ] Auto-tagging workflow (automatic search after scan)
+- [ ] Interactive prompts for ambiguous matches ([A]pply/[s]kip/[m]anual search)
+- [ ] Track mapping preview (show proposed changes before applying)
+- [ ] Dry-run mode (show what would be written without modifying files)
 
 ### Success Criteria
 
@@ -68,12 +71,31 @@ Validate the three riskiest assumptions:
 - Code feels maintainable (not fighting the borrow checker constantly)
 - Decision: Continue to Phase 1 or stop here
 
+### Auto-Tagging Workflow (Beets-Inspired)
+
+The PoC implements a simplified version of beets' auto-tagging import flow:
+
+1. **Scan completes** → automatically begin tagging first cluster
+2. **Background search** → query MusicBrainz for matches
+3. **Similarity scoring** → calculate match confidence (0-100%)
+4. **Auto-apply high confidence** → matches ≥98% apply automatically (future: Phase 3)
+5. **Prompt for ambiguous** → low confidence shows user choices:
+   - **[A]pply** - Accept the best match
+   - **[s]kip** - Skip this cluster
+   - **[m]anual** - Enter artist/album for manual search
+6. **Track mapping preview** → show proposed changes before applying
+7. **Process sequentially** → one cluster at a time (concurrent queue in Phase 3)
+
+This validates the core matching algorithm before adding complexity like concurrent processing, duplicate detection, and file writing.
+
 ### Technical Focus
 
 - **State machine patterns**: AppState enum with explicit transitions
-- **Async in sync context**: Background MusicBrainz calls via channels
+- **Tokio in sync context**: Background MusicBrainz calls in spawned thread with tokio runtime
 - **TUI architecture**: Separation of rendering and business logic
 - **Error handling**: color-eyre for debugging and user feedback
+- **Rate limiting**: MusicBrainz 1 req/sec enforcement
+- **Parallel scanning**: rayon for multi-core directory traversal
 
 ### Key Modules to Build
 

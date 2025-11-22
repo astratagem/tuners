@@ -20,21 +20,25 @@ This is an early-stage scaffold demonstrating idiomatic Rust project structure f
 ### What Works Now
 
 - [x] TUI interface with ratatui
-- [x] Directory scanning for audio files
+- [x] Parallel directory scanning with live progress (using rayon)
 - [x] Metadata extraction from MP3, M4A, and FLAC files
+- [x] Duration calculation from audio streams (MP3, FLAC, M4A)
 - [x] Album clustering based on directory and tags
-- [ ] Interactive navigation with keyboard
-- [ ] Multi-disc albums
+- [x] Multi-disc album support with proper track sorting
+- [x] Interactive cluster detail view with track listings
+- [x] Keyboard navigation (j/k, arrows, space, Enter)
 
 ### What's Next
 
 See [ROADMAP.md](ROADMAP.md) for the complete development plan.
 
 **Immediate next steps:**
-- MusicBrainz search integration
-- Fuzzy matching/scoring algorithm
-- Match selection interface
-- Track mapping review
+- Auto-tagging workflow (automatic MusicBrainz search after scan)
+- Similarity scoring algorithm (0-100% match confidence)
+- Interactive prompts for ambiguous matches
+- Track mapping preview before applying changes
+
+The goal is to replicate beets' core auto-tagging experience: scan → auto-search → prompt only when needed → preview changes.
 
 ## Quick Start
 
@@ -66,7 +70,12 @@ cargo run /path/to/music
 
 **Cluster list screen:**
 - `↑/↓` or `j/k` - Navigate clusters
-- `Enter` - Search MusicBrainz (not yet implemented)
+- `Space` or `Enter` - View cluster details
+- `q` or `Ctrl-C` - Quit
+
+**Cluster detail screen:**
+- `↑/↓` or `j/k` - Navigate tracks
+- `Esc` or `h` - Back to cluster list
 - `q` or `Ctrl-C` - Quit
 
 ## Architecture
@@ -77,12 +86,12 @@ cargo run /path/to/music
 src/
   main.rs          - Entry point (argument parsing only)
   app.rs           - Application state machine and event loop
-  terminal.rs      - Terminal initialization and cleanup
   ui.rs            - TUI rendering for each state
   models.rs        - Domain types (AudioFile, AlbumCluster)
+  codecs.rs        - Audio codec enumeration
+  scanner.rs       - Directory scanning and clustering (with rayon parallelism)
   scanner/
-    mod.rs         - Directory scanning and clustering
-    metadata.rs    - Tag extraction by format
+    metadata.rs    - Tag extraction by format (MP3, M4A, FLAC)
 ```
 
 ### Design Principles
@@ -120,12 +129,14 @@ src/
 
 - **ratatui** - TUI framework
 - **crossterm** - Terminal handling (backend for ratatui)
+- **rayon** - Data parallelism for concurrent directory scanning
 - **musicbrainz_rs** - MusicBrainz API wrapper (not yet used)
+- **tokio** - Async runtime (for future MusicBrainz calls)
 - **id3, mp4ameta, metaflac** - Tag reading libraries
+- **mp3-duration** - Calculate MP3 duration from audio stream
 - **walkdir** - Directory traversal
 - **color-eyre** - Error handling with beautiful reports
-- **strsim** - String similarity (for future matching algorithm)
-- **tokio** - Async runtime (for future MusicBrainz calls)
+- **strsim** - String similarity (for matching algorithm)
 
 ## Development
 

@@ -268,11 +268,13 @@ let chunks = Layout::default()
 
 ### Utilities
 - `walkdir = "2"` - Directory traversal
+- `rayon = "1.10"` - Data parallelism for concurrent scanning
 - `strsim = "0.11"` - String similarity (for matching)
+- `mp3-duration = "0.1"` - Calculate MP3 duration from audio stream
 
-### Future
-- `musicbrainz_rs = "0.5"` - MusicBrainz API (not yet used)
-- `tokio = "1"` - Async runtime (for MB API)
+### Async/Future
+- `musicbrainz_rs = "0.12"` - MusicBrainz API (not yet used)
+- `tokio = "1.40"` - Async runtime (for MB API)
 
 **Adding dependencies:**
 - Check if widely used and maintained
@@ -447,113 +449,191 @@ Current phase (PoC) prioritizes correctness over performance, but:
 - Unsafe code for performance
 - Complex caching schemes
 
+**Implemented:**
+- ✅ Parallel scanning with rayon (see "Parallel Processing" section below)
+
 **Later phases** will focus on:
-- Parallel scanning with rayon
 - Database query optimization
 - Caching metadata lookups
 
+## Parallel Processing with Rayon
+
+The scanner uses rayon for data parallelism across multiple CPU cores.
+
+### Pattern: Progress Updates from Parallel Iterators
+
+```rust
+use std::sync::{mpsc::Sender, Arc, atomic::{AtomicUsize, Ordering}};
+
+pub fn scan_directory(
+    path: &Path,
+    progress_tx: Option<Sender<(usize, String)>>,
+) -> Result<Vec<AudioFile>> {
+    let tx = progress_tx.map(Arc::new);  // Wrap in Arc for thread-safety
+    let count = Arc::new(AtomicUsize::new(0));  // Thread-safe counter
+
+    let files: Vec<AudioFile> = WalkDir::new(path)
+        .into_iter()
+        .par_bridge()  // Convert to parallel iterator
+        .filter_map(|entry| {
+            // Process entry...
+            let audio_file = metadata::extract(path).ok()?;
+
+            // Send progress update from parallel context
+            if let Some(ref tx) = tx {
+                let n = count.fetch_add(1, Ordering::Relaxed);
+                let _ = tx.send((n + 1, path.display().to_string()));
+            }
+
+            Some(audio_file)
+        })
+        .collect();
+
+    Ok(files)
+}
+```
+
+**Key techniques:**
+- `Arc<Sender>` - Share sender across parallel threads
+- `AtomicUsize` - Thread-safe counter without locks
+- `.par_bridge()` - Convert sequential iterator to parallel
+- `Ordering::Relaxed` - Good enough for progress counts (don't need strict ordering)
+
+### Why Rayon?
+
+**Decision**: Use rayon instead of manual thread management for parallelism.
+
+**Reasoning**:
+- Zero-cost abstraction over thread pools
+- Standard in Rust ecosystem (used by ripgrep, rustc)
+- Encourages data parallelism (vs shared mutable state)
+- Simpler than manual thread spawning/joining
+- Learning goal is building the music manager, not becoming threading expert
+
+**Trade-off**: Less low-level threading knowledge, but better project focus.
+
 ## MusicBrainz Integration (Next Task)
 
-When implementing MusicBrainz search:
+### Auto-Tagging Workflow (Beets-Inspired)
+
+**Important**: The workflow is **automatic**, not manual. After scan completes, auto-tagging begins immediately.
+
+**Phase 0 PoC Scope** (simplified, sequential):
+1. Scan completes → transition to auto-tagging first cluster
+2. Search MusicBrainz for cluster (artist + album)
+3. Score results (0-100% similarity)
+4. If high confidence (≥98% - future): auto-apply
+5. If low confidence: prompt user with options:
+   - **[A]pply** - Accept best match
+   - **[s]kip** - Skip this cluster
+   - **[m]anual** - Enter search terms manually
+6. Show track mapping preview before applying
+7. Move to next cluster (repeat)
+
+**Phase 3 additions** (deferred):
+- Concurrent processing (queue multiple clusters)
+- Auto-apply high confidence matches
+- More user options ([U]se as-is, [T]racks mode, etc.)
+- Duplicate detection
+- File writing
 
 ### Module Structure
 ```
 src/musicbrainz/
-  mod.rs      - Public API: search_release(), fetch_details()
-  client.rs   - Wrapper around musicbrainz_rs with rate limiting
-  search.rs   - Search strategies (by artist+album, barcode, etc)
+  mod.rs      - Public API and message types
+  client.rs   - Rate-limited wrapper around musicbrainz_rs
+  search.rs   - Search logic (artist+album query)
+
+src/matching/   (or integrated into musicbrainz for PoC)
+  mod.rs      - Similarity scoring (0-100%)
 ```
 
 ### Key Considerations
 
 1. **Rate Limiting**: MusicBrainz requires 1 request/sec
    - Use tokio::time::sleep between requests
-   - Queue requests if multiple needed
+   - Enforce in client wrapper
 
-2. **Search Strategy**:
-   - Primary: Artist + Album search
-   - Fallback: Recording search if no album match
-   - Optional: Barcode lookup if available
+2. **Search Strategy** (PoC):
+   - Primary: Artist + Album search from cluster metadata
+   - Manual search option when auto-search fails
 
 3. **Threading Pattern**:
-   - Follow scanner pattern with channels
-   - Spawn thread that blocks on tokio runtime
+   - Spawn thread with tokio runtime inside (like scanner pattern)
    - Send results back via mpsc::channel
+   - UI thread remains synchronous
 
 4. **Error Handling**:
-   - Network errors are recoverable (show retry option)
-   - API errors need user-friendly messages
-   - Rate limit errors should pause, not fail
+   - Network errors → show error, offer retry
+   - No results found → offer manual search
+   - Rate limit errors → pause, don't fail
 
 5. **State Integration**:
-   - Add `Searching` state to AppState
-   - Add `MatchSelection` state for results
-   - Store search results in state variant
+   ```rust
+   pub enum AppState {
+       // ... existing
+       AutoTagging {
+           current_cluster: AlbumCluster,
+           status: TaggingStatus,  // Searching | AwaitingInput | Applying
+           search_results: Option<Vec<ScoredRelease>>,
+           selected_idx: usize,
+       },
+   }
 
-### Example Structure
+   pub enum TaggingStatus {
+       Searching,
+       PromptingUser,
+       Applying,
+   }
+   ```
 
-```rust
-// In app.rs
-pub enum AppState {
-    // ... existing states
-    Searching {
-        cluster: AlbumCluster,
-        status: String,
-    },
-    MatchSelection {
-        cluster: AlbumCluster,
-        matches: Vec<ScoredRelease>,
-        selected_idx: usize,
-    },
-}
+## Similarity Scoring (Integrated with MusicBrainz)
 
-// In musicbrainz/mod.rs
-pub async fn search_release(
-    artist: &str,
-    album: &str,
-) -> Result<Vec<Release>> {
-    // Use musicbrainz_rs
-}
+The scoring algorithm calculates match confidence (0-100%) for MusicBrainz results.
+
+### Scoring Factors (Initial Weights)
+- Artist name similarity (30% weight) - using `strsim` crate
+- Album title similarity (30% weight) - using `strsim` crate
+- Track count match (10% weight) - exact match bonus
+- Track name matching (20% weight) - average similarity across tracks
+- Duration similarity (10% weight) - if available
+
+**Note**: These weights will need tuning with real data.
+
+### Implementation Location (PoC)
+
+For PoC, integrate scoring into musicbrainz module to keep simple:
+```
+src/musicbrainz/
+  mod.rs      - Public API and ScoredRelease type
+  client.rs   - Rate-limited API wrapper
+  search.rs   - Search + scoring
 ```
 
-## Fuzzy Matching (After MusicBrainz)
+Later (Phase 1+), extract to separate `matching/` module.
 
-The scoring algorithm is critical and will need iteration:
-
-### Scoring Factors
-- Artist name similarity (30% weight)
-- Album title similarity (30% weight)
-- Track count match (10% weight)
-- Track name matching (20% weight)
-- Duration similarity (10% weight)
-
-### Implementation Location
-```
-src/matching/
-  mod.rs       - Public API: score_release()
-  distance.rs  - String distance functions (use strsim)
-  scorer.rs    - Combine factors into score
-  types.rs     - ScoredRelease, TrackMapping
-```
-
-### Key Functions
+### Key Types
 
 ```rust
 pub struct ScoredRelease {
-    pub release: Release,
-    pub score: f64,  // 0.0 to 1.0
+    pub release: Release,           // from musicbrainz_rs
+    pub score: u8,                   // 0-100 (percentage)
     pub track_mappings: Vec<TrackMapping>,
 }
 
-pub fn score_release(
-    cluster: &AlbumCluster,
-    release: &Release,
-) -> ScoredRelease {
-    // Combine all factors
+pub struct TrackMapping {
+    pub cluster_track: AudioFile,
+    pub mb_track: Track,
+    pub confidence: u8,              // 0-100
 }
 ```
 
-This will need **extensive tuning** with real data.
+### String Similarity
+
+Use `strsim::jaro_winkler()` for artist/album/track names:
+- Returns 0.0-1.0
+- Good for fuzzy matching with typos
+- Weights beginning of strings more heavily
 
 ## Questions to Ask Before Big Changes
 
