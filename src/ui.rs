@@ -47,11 +47,7 @@ fn render_scanning(
             files.len()
         )
     } else if let Some(current_file) = current {
-        format!(
-            "Found {} audio files so far...\n\nCurrently scanning: {}",
-            files.len(),
-            current_file
-        )
+        current_file.clone()
     } else {
         format!("Found {} audio files so far...", files.len())
     };

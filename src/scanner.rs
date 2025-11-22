@@ -5,6 +5,11 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc::Sender,
+        Arc,
+    },
 };
 
 use color_eyre::eyre::Result;
@@ -25,7 +30,13 @@ const DEFAULT_TOTAL_DISCS: u8 = 1;
 
 /// Scan a directory recursively for audio files and extract their
 /// metadata.
-pub fn scan_directory(path: &Path) -> Result<Vec<AudioFile>> {
+pub fn scan_directory(
+    path: &Path,
+    progress_tx: Option<Sender<(usize, String)>>,
+) -> Result<Vec<AudioFile>> {
+    let tx = progress_tx.map(Arc::new);
+    let count = Arc::new(AtomicUsize::new(0));
+
     let files: Vec<AudioFile> = WalkDir::new(path)
         .follow_links(false)
         .into_iter()
@@ -34,15 +45,19 @@ pub fn scan_directory(path: &Path) -> Result<Vec<AudioFile>> {
             let entry = it.ok()?;
             let path = entry.path();
 
-            if !path.is_file() {
+            if !path.is_file() || !is_supported_audio_file(path) {
                 return None;
             }
 
-            if !is_supported_audio_file(path) {
-                return None;
+            let audio_file = metadata::extract(path).ok();
+
+            // Send progress update.
+            if let Some(ref tx) = tx {
+                let n = count.fetch_add(1, Ordering::Relaxed);
+                let _ = tx.send((n * 1, path.display().to_string()));
             }
 
-            metadata::extract(path).ok()
+            audio_file
         })
         .collect();
 

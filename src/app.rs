@@ -19,6 +19,7 @@ pub struct App {
     state: AppState,
     should_quit: bool,
     scan_rx: Option<mpsc::Receiver<ScanMessage>>,
+    scan_progress_rx: Option<mpsc::Receiver<(usize, String)>>,
 }
 
 #[derive(Debug)]
@@ -55,6 +56,7 @@ impl App {
             },
             should_quit: false,
             scan_rx: None,
+            scan_progress_rx: None,
         }
     }
 
@@ -82,27 +84,35 @@ impl App {
         if let AppState::Scanning { path, .. } = &self.state {
             let scan_path = path.clone();
             let (tx, rx) = mpsc::channel();
+            let (progress_tx, progress_rx) = mpsc::channel::<(usize, String)>();
 
-            thread::spawn(move || match scanner::scan_directory(&scan_path) {
-                Ok(files) => tx.send(ScanMessage::Complete(files)),
-                Err(e) => tx.send(ScanMessage::Error(format!("Scan failed: {}", e))),
-            });
+            thread::spawn(
+                move || match scanner::scan_directory(&scan_path, Some(progress_tx)) {
+                    Ok(files) => tx.send(ScanMessage::Complete(files)),
+                    Err(e) => tx.send(ScanMessage::Error(format!("Scan failed: {}", e))),
+                },
+            );
 
             self.scan_rx = Some(rx);
+            self.scan_progress_rx = Some(progress_rx);
         }
     }
 
     fn handle_messages(&mut self) {
+        if let Some(rx) = &self.scan_progress_rx {
+            while let Ok((count, path)) = rx.try_recv() {
+                if let AppState::Scanning { current_file, .. } = &mut self.state {
+                    *current_file = Some(format!("Found {} audio files so far... {}", count, path))
+                }
+            }
+        }
+
         if let Some(rx) = &self.scan_rx
             && let Ok(message) = rx.try_recv()
         {
             match message {
-                ScanMessage::Complete(files) => {
-                    self.complete_scan(files);
-                }
-                ScanMessage::Error(msg) => {
-                    self.set_error(msg);
-                }
+                ScanMessage::Complete(files) => self.complete_scan(files),
+                ScanMessage::Error(msg) => self.set_error(msg),
             }
         }
     }
@@ -147,18 +157,6 @@ impl App {
         }
 
         Ok(())
-    }
-
-    fn update_scan(&mut self, files: Vec<AudioFile>, current: Option<String>) {
-        if let AppState::Scanning {
-            files_found,
-            current_file,
-            ..
-        } = &mut self.state
-        {
-            *files_found = files;
-            *current_file = current;
-        }
     }
 
     fn complete_scan(&mut self, files: Vec<AudioFile>) {
