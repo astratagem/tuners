@@ -12,15 +12,13 @@ use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
 use rayon::prelude::*;
 
+use crate::credit::UNKNOWN_ALBUM_NAME;
+use crate::credit::UNKNOWN_ARTIST_NAME;
 use crate::models::{AlbumCluster, AudioFile};
 
 mod metadata;
 
 const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "flac"];
-
-const UNKNOWN_ARTIST_NAME: &str = "Unknown Artist";
-
-const UNKNOWN_ALBUM_NAME: &str = "Unknown Album";
 
 const DEFAULT_TOTAL_DISCS: u8 = 1;
 

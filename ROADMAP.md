@@ -53,16 +53,18 @@ Validate the three riskiest assumptions:
 ### Deliverables
 
 - [x] TUI scaffold with ratatui
-- [x] Directory scanning and clustering (with parallel processing via rayon)
+- [x] Directory scanning and clustering (sequential with concurrent search processing)
 - [x] Tag reading (MP3, M4A, FLAC) with duration calculation
 - [x] Multi-disc album support
 - [x] Cluster detail view with track listings
-- [ ] MusicBrainz integration via musicbrainz_rs
+- [x] MusicBrainz API client with rate limiting (1 req/sec)
+- [x] Concurrent scan/search pipeline with bounded queue
+- [x] Basic match result display UI
 - [ ] Similarity scoring algorithm (0-100%, weighted by artist/album/tracks)
-- [ ] Auto-tagging workflow (automatic search after scan)
-- [ ] Interactive prompts for ambiguous matches ([A]pply/[s]kip/[m]anual search)
 - [ ] Track mapping preview (show proposed changes before applying)
+- [ ] Interactive prompts for ambiguous matches ([A]pply/[s]kip/[m]anual search)
 - [ ] Dry-run mode (show what would be written without modifying files)
+- [ ] Tag writing functionality (apply matched metadata to files)
 
 ### Success Criteria
 
@@ -91,25 +93,35 @@ This validates the core matching algorithm before adding complexity like concurr
 ### Technical Focus
 
 - **State machine patterns**: AppState enum with explicit transitions
+- **Concurrent processing**: OS threads with bounded channels for scan/search pipeline
 - **Tokio in sync context**: Background MusicBrainz calls in spawned thread with tokio runtime
 - **TUI architecture**: Separation of rendering and business logic
 - **Error handling**: color-eyre for debugging and user feedback
-- **Rate limiting**: MusicBrainz 1 req/sec enforcement
-- **Parallel scanning**: rayon for multi-core directory traversal
+- **Rate limiting**: MusicBrainz 1 req/sec enforcement via async throttling
+- **Sequential scanning with rayon**: Directory-by-directory processing with parallel file operations
 
-### Key Modules to Build
+### Key Modules
 
+**Completed:**
 ```
 src/
   musicbrainz/
-    mod.rs          - Public search API
-    client.rs       - Rate limiting wrapper
-    search.rs       - Search strategies
-  matching/
+    mod.rs          - Public API and SearchMessage types
+    client.rs       - Rate-limited MusicBrainz API wrapper
+    search.rs       - Search logic with message passing
+```
+
+**To Build:**
+```
+src/
+  matching/         - (or integrate into musicbrainz for PoC)
     mod.rs          - Public scoring API
-    distance.rs     - String similarity algorithms
-    scorer.rs       - Release scoring logic
+    scorer.rs       - Similarity scoring (0-100%)
     types.rs        - ScoredRelease, TrackMapping
+  tagger/
+    mod.rs          - Tag writing API
+    writer.rs       - Format-specific tag writing
+    mapping.rs      - Track mapping logic
 ```
 
 ### Risks and Mitigations

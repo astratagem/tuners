@@ -57,6 +57,8 @@ This document tracks which beets configuration options we plan to support, defer
 
 **Phase 0**: Cluster by directory + metadata (similar to `group_albums=no`).
 
+**Important clarification on metadata inference**: Beets uses **existing tags** for MusicBrainz searches, NOT directory/filenames. Directories are only for **grouping** files into albums. When tags are missing/bad, beets searches with what exists (even "Unknown Artist") and lets the user manually refine the search. The **FromFilename** plugin (Phase 3+) provides fallback parsing for completely untagged files.
+
 ## Path & File Organization (Phase 2)
 
 ### Core Directory Structure

@@ -2,12 +2,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::{app::AppState, codecs::codec_name};
+use crate::{app::AppState, codecs::codec_name, credit::UNKNOWN_ARTIST_NAME, models::AlbumCluster};
+use musicbrainz_rs::entity::release::Release;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_macros::vertical;
 
 const SECONDS_PER_MINUTE: u32 = 60;
 const SECONDS_PER_HOUR: u32 = 3600;
+
+const HIGHLIGHT_SYMBOL: &str = "» ";
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     match state {
@@ -17,6 +20,11 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             current_file,
             is_complete,
         } => render_scanning(frame, path, files_found, current_file, *is_complete),
+        AppState::AutoTagging {
+            cluster,
+            results,
+            selected_idx,
+        } => render_autotagging(frame, cluster, results, *selected_idx),
         AppState::ClusterList {
             clusters,
             selected_idx,
@@ -67,6 +75,102 @@ fn render_scanning(
     let footer = Paragraph::new(help).block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(footer, footer_area);
+}
+
+fn render_autotagging(
+    frame: &mut Frame,
+    cluster: &AlbumCluster,
+    results: &[Release],
+    selected_idx: usize,
+) {
+    let [header_area, main_area, footer_area] = vertical![==5, >=10, ==3].areas(frame.area());
+
+    let cluster_info = format!(
+        "Album Artist: {}\nAlbum: {}\nTracks: {}\nPath: {}",
+        cluster.album_artist,
+        cluster.album,
+        cluster.tracks.len(),
+        cluster.base_path.display()
+    );
+    let header = Paragraph::new(cluster_info)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Current Cluster"),
+        )
+        .wrap(Wrap { trim: true });
+    frame.render_widget(header, header_area);
+
+    if results.is_empty() {
+        let no_results =
+            Paragraph::new("No matches found\n\nPress [m] for manual search or [s] to skip")
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Search Results"),
+                )
+                .wrap(Wrap { trim: true });
+        frame.render_widget(no_results, main_area);
+    } else {
+        let items: Vec<ListItem> = results
+            .iter()
+            .enumerate()
+            .map(render_search_result)
+            .collect();
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("Found {} matches", results.len())),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(HIGHLIGHT_SYMBOL);
+
+        let mut state = ListState::default();
+        state.select(Some(selected_idx));
+        frame.render_stateful_widget(list, main_area, &mut state);
+    }
+
+    let help =
+        Paragraph::new("j/k or ↑/↓ : Navigate | [a]pply | [s]kip | [m]anual search | q : Quit")
+            .block(Block::default().borders(Borders::ALL).title("Actions"));
+    frame.render_widget(help, footer_area);
+}
+
+fn render_search_result(result: (usize, &Release)) -> ListItem<'_> {
+    let (idx, release) = result;
+    let artist = release
+        .artist_credit
+        .as_ref()
+        .and_then(|ac| ac.first())
+        .and_then(|a| Some(a.name.clone()))
+        .unwrap_or_else(|| UNKNOWN_ARTIST_NAME.to_string());
+    let date = release
+        .date
+        .as_ref()
+        .map(|it| it.0.as_str())
+        .unwrap_or("????");
+    let track_count = release
+        .media
+        .as_ref()
+        .map(|media| media.iter().map(|it| it.track_count).sum::<u32>())
+        .unwrap_or(0);
+    let text = format!(
+        "{}. {} - {} ({}) [Tracks: {}] [Country: {}]",
+        idx + 1,
+        artist,
+        release.title,
+        date,
+        track_count,
+        release.country.clone().unwrap_or(String::from("??"))
+    );
+
+    ListItem::new(text)
 }
 
 fn render_clusters(

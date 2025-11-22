@@ -10,27 +10,31 @@ This document provides context for Claude Code when working on this project.
 
 ## Project Overview
 
-**Name**: tuners  
-**Type**: Music library manager (TUI application)  
-**Language**: Rust  
-**Stage**: Phase 0 - Proof of Concept (In Progress)  
+**Name**: tuners
+**Type**: Music library manager (TUI application)
+**Language**: Rust
+**Stage**: Phase 0 - Proof of Concept (In Progress)
 **Purpose**: Rewrite of Python beets with focus on performance, type safety, and reliability
 
 ## Current Status
 
 **Completed:**
 - TUI scaffold with ratatui and crossterm
-- Directory scanning and audio file detection
+- Sequential directory scanning with concurrent search processing
 - Metadata extraction (MP3, M4A, FLAC)
 - Album clustering logic
 - State machine architecture
 - Terminal lifecycle management
+- MusicBrainz API client with rate limiting (1 req/sec)
+- Concurrent scan/search pipeline with bounded queue (capacity 5)
+- Basic match result display UI showing artist, title, date, track count
 
 **Next Immediate Tasks:**
-- Implement MusicBrainz search integration
-- Build fuzzy matching/scoring algorithm
-- Create match selection UI
-- Add track mapping review screen
+- Build similarity scoring algorithm (0-100%)
+- Create track mapping preview screen
+- Implement manual search functionality
+- Add dry-run tag writing mode
+- Implement actual tag writing (apply functionality)
 
 See [ROADMAP.md](ROADMAP.md) for complete development plan.
 
@@ -51,6 +55,11 @@ All application states are defined in `AppState` enum in `app.rs`:
 ```rust
 pub enum AppState {
     Scanning { /* fields */ },
+    AutoTagging {
+        cluster: AlbumCluster,
+        results: Vec<Release>,
+        selected_idx: usize,
+    },
     ClusterList { /* fields */ },
     Error { /* fields */ },
     // Add new states here
@@ -80,17 +89,17 @@ src/
   terminal.rs           - Terminal abstraction
   ui.rs                 - Rendering dispatch
   models.rs             - Domain types
-  
+
   scanner/
     mod.rs              - Public scanning API
     metadata.rs         - Private implementation
-    
-  musicbrainz/          (planned)
-    mod.rs              - Public search API
-    client.rs           - Rate-limited API wrapper
-    search.rs           - Search strategies
-    
-  matching/             (planned)
+
+  musicbrainz/          ✓ implemented
+    mod.rs              - Public API and SearchMessage types
+    client.rs           - Rate-limited MusicBrainz API wrapper
+    search.rs           - Search logic with message passing
+
+  matching/             (to be built)
     mod.rs              - Public scoring API
     distance.rs         - String similarity
     scorer.rs           - Release scoring logic
@@ -512,30 +521,37 @@ pub fn scan_directory(
 
 **Trade-off**: Less low-level threading knowledge, but better project focus.
 
-## MusicBrainz Integration (Next Task)
+## MusicBrainz Integration (In Progress)
 
 ### Auto-Tagging Workflow (Beets-Inspired)
 
-**Important**: The workflow is **automatic**, not manual. After scan completes, auto-tagging begins immediately.
+**Important**: The workflow is **automatic**, not manual. Searching begins during scan, processing happens concurrently.
 
-**Phase 0 PoC Scope** (simplified, sequential):
-1. Scan completes → transition to auto-tagging first cluster
-2. Search MusicBrainz for cluster (artist + album)
-3. Score results (0-100% similarity)
-4. If high confidence (≥98% - future): auto-apply
-5. If low confidence: prompt user with options:
-   - **[A]pply** - Accept best match
-   - **[s]kip** - Skip this cluster
-   - **[m]anual** - Enter search terms manually
-6. Show track mapping preview before applying
-7. Move to next cluster (repeat)
+**Implementation Status**:
+
+✅ **Completed**:
+1. Concurrent scan/search pipeline with bounded queue (capacity 5)
+2. Search MusicBrainz using cluster's **existing tags** (album_artist + album)
+   - Beets infers tags from existing metadata, not from directory/filenames
+   - Directories are only used for **grouping** files into albums
+   - If tags are missing/bad → poor search results → user uses manual search
+3. Basic match result display showing artist, title, date, track count
+4. Queue management system for processing clusters one at a time
+5. j/k navigation through results
+
+⏳ **To Do**:
+1. Similarity scoring algorithm (0-100%)
+2. Track mapping preview (show proposed tag changes)
+3. Manual search functionality (enter custom artist/album query)
+4. Dry-run mode (show what would be written without modifying files)
+5. Actual tag writing functionality (apply selected match to files)
+
+**Note on metadata inference**: Beets expects music to have *some* existing tags, even if imperfect. Directory names and filenames are NOT used for searching - only for organization. The **FromFilename** plugin (Phase 3+) handles filename parsing as a fallback for completely untagged files.
 
 **Phase 3 additions** (deferred):
-- Concurrent processing (queue multiple clusters)
-- Auto-apply high confidence matches
+- Auto-apply high confidence matches (≥98%)
 - More user options ([U]se as-is, [T]racks mode, etc.)
 - Duplicate detection
-- File writing
 
 ### Module Structure
 ```
@@ -548,44 +564,40 @@ src/matching/   (or integrated into musicbrainz for PoC)
   mod.rs      - Similarity scoring (0-100%)
 ```
 
-### Key Considerations
+### Implementation Details
 
-1. **Rate Limiting**: MusicBrainz requires 1 request/sec
-   - Use tokio::time::sleep between requests
-   - Enforce in client wrapper
+1. ✅ **Rate Limiting**: MusicBrainz requires 1 request/sec
+   - Implemented via `tokio::time::sleep` with throttle tracking
+   - Enforced in `Client::throttle()` method
 
-2. **Search Strategy** (PoC):
+2. ✅ **Search Strategy**:
    - Primary: Artist + Album search from cluster metadata
-   - Manual search option when auto-search fails
+   - Uses ReleaseSearchQuery builder with artistname + release fields
+   - ⏳ Manual search option (not yet implemented)
 
-3. **Threading Pattern**:
-   - Spawn thread with tokio runtime inside (like scanner pattern)
-   - Send results back via mpsc::channel
+3. ✅ **Threading Pattern**:
+   - Scanner thread emits clusters via bounded sync_channel (capacity 5)
+   - Search worker thread with tokio runtime consumes cluster queue
+   - Sends results back via mpsc::channel (SearchMessage enum)
    - UI thread remains synchronous
 
-4. **Error Handling**:
-   - Network errors → show error, offer retry
-   - No results found → offer manual search
-   - Rate limit errors → pause, don't fail
+4. ⏳ **Error Handling**:
+   - Network errors → currently just logged to stderr
+   - No results found → displays "No matches found" message
+   - ⏳ Retry functionality not implemented
 
-5. **State Integration**:
+5. ✅ **State Integration**:
    ```rust
    pub enum AppState {
        // ... existing
        AutoTagging {
-           current_cluster: AlbumCluster,
-           status: TaggingStatus,  // Searching | AwaitingInput | Applying
-           search_results: Option<Vec<ScoredRelease>>,
+           cluster: AlbumCluster,
+           results: Vec<Release>,
            selected_idx: usize,
        },
    }
-
-   pub enum TaggingStatus {
-       Searching,
-       PromptingUser,
-       Applying,
-   }
    ```
+   Note: Simplified from initial design - no separate TaggingStatus enum for PoC.
 
 ## Similarity Scoring (Integrated with MusicBrainz)
 

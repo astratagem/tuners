@@ -2,26 +2,37 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::{io::Stdout, path::PathBuf, sync::mpsc, thread, time::Duration};
+use std::{collections::VecDeque, io::Stdout, path::PathBuf, sync::mpsc, thread, time::Duration};
 
 use color_eyre::eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::{prelude::CrosstermBackend, Terminal};
+use musicbrainz_rs::entity::release::Release;
+use ratatui::{Terminal, prelude::CrosstermBackend};
 
 use crate::{
     models::{AlbumCluster, AudioFile},
+    musicbrainz::{
+        client::Client as MbClient,
+        search::{SearchMessage, search_for_cluster},
+    },
     scanner::{self, ScanProgress},
     ui,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(100);
 
+struct PendingCluster {
+    cluster: AlbumCluster,
+    results: Vec<Release>,
+}
+
 pub struct App {
+    pending_clusters: VecDeque<PendingCluster>,
     state: AppState,
     should_quit: bool,
-    cluster_rx: Option<mpsc::Receiver<AlbumCluster>>,
     scan_rx: Option<mpsc::Receiver<ScanMessage>>,
     scan_progress_rx: Option<mpsc::Receiver<ScanProgress>>,
+    search_rx: Option<mpsc::Receiver<SearchMessage>>,
 }
 
 #[derive(Debug)]
@@ -31,6 +42,11 @@ pub enum AppState {
         files_found: Vec<AudioFile>,
         current_file: Option<String>,
         is_complete: bool,
+    },
+    AutoTagging {
+        cluster: AlbumCluster,
+        results: Vec<Release>,
+        selected_idx: usize,
     },
     ClusterList {
         clusters: Vec<AlbumCluster>,
@@ -46,10 +62,17 @@ enum ScanMessage {
     Error(String),
 }
 
+struct AutoTagging {
+    cluster: AlbumCluster,
+    results: Option<Vec<Release>>,
+    selected_idx: usize,
+}
+
 impl App {
     /// Constructs a new instance of [`App`].
     pub fn new(path: PathBuf) -> Self {
         Self {
+            pending_clusters: VecDeque::new(),
             state: AppState::Scanning {
                 path,
                 files_found: Vec::new(),
@@ -57,9 +80,9 @@ impl App {
                 is_complete: false,
             },
             should_quit: false,
-            cluster_rx: None,
             scan_rx: None,
             scan_progress_rx: None,
+            search_rx: None,
         }
     }
 
@@ -88,13 +111,30 @@ impl App {
             let scan_path = path.clone();
             let (cluster_tx, cluster_rx) = mpsc::sync_channel(5);
             let (progress_tx, progress_rx) = mpsc::channel();
+            let (search_tx, search_rx) = mpsc::channel();
 
             thread::spawn(move || {
                 let _ = scanner::scan_directory(&scan_path, cluster_tx, Some(progress_tx));
             });
 
-            self.cluster_rx = Some(cluster_rx);
+            thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+
+                rt.block_on(async {
+                    let mut client = MbClient::new();
+
+                    while let Ok(cluster) = cluster_rx.recv() {
+                        let result =
+                            search_for_cluster(&mut client, search_tx.clone(), cluster).await;
+                        if let Err(e) = result {
+                            eprintln!("Search error: {}", e);
+                        }
+                    }
+                })
+            });
+
             self.scan_progress_rx = Some(progress_rx);
+            self.search_rx = Some(search_rx);
         }
     }
 
@@ -106,6 +146,49 @@ impl App {
                         "Scanning: {} ({} clusters found)",
                         progress.current_dir, progress.clusters_found
                     ));
+                }
+            }
+        }
+
+        // Collect search messages first to avoid borrow issues.
+        let mut messages = Vec::new();
+        if let Some(rx) = &self.search_rx {
+            while let Ok(message) = rx.try_recv() {
+                messages.push(message);
+            }
+        }
+
+        for message in messages {
+            match message {
+                SearchMessage::Searching(_cluster, status) => {
+                    if let AppState::Scanning { current_file, .. } = &mut self.state {
+                        *current_file = Some(format!("🔍 {}", status));
+                    }
+                }
+                SearchMessage::Results(cluster, releases) => {
+                    self.pending_clusters.push_back(PendingCluster {
+                        cluster,
+                        results: releases,
+                    });
+
+                    if !matches!(self.state, AppState::AutoTagging { .. }) {
+                        self.show_next_cluster();
+                    }
+                }
+                SearchMessage::NoResults(cluster) => {
+                    // todo!("Prompt user for manual search or skip etc.");
+                    if let AppState::Scanning { current_file, .. } = &mut self.state {
+                        *current_file = Some(format!(
+                            "∅ No matches for {} - {}",
+                            cluster.album_artist, cluster.album
+                        ));
+                    }
+                }
+                SearchMessage::Error(_cluster, msg) => {
+                    if let AppState::Scanning { current_file, .. } = &mut self.state {
+                        *current_file = Some(format!("⚠ Error: {}", msg));
+                    }
+                    // todo!("Show error to user");
                 }
             }
         }
@@ -145,6 +228,14 @@ impl App {
                         };
                     }
                 }
+                AppState::AutoTagging { .. } => match key.code {
+                    KeyCode::Char('k') | KeyCode::Up => self.select_previous_match(),
+                    KeyCode::Char('j') | KeyCode::Down => self.select_next_match(),
+                    KeyCode::Char('A') => self.handle_apply(),
+                    KeyCode::Char('s') => self.handle_skip(),
+                    KeyCode::Char('M') => self.handle_manual_search(),
+                    _ => {}
+                },
                 AppState::ClusterList { .. } => match key.code {
                     KeyCode::Up | KeyCode::Char('k') => self.select_previous(),
                     KeyCode::Down | KeyCode::Char('j') => self.select_next(),
@@ -171,6 +262,56 @@ impl App {
                 current_file: None,
                 is_complete: true,
             };
+        }
+    }
+
+    fn show_next_cluster(&mut self) {
+        if let Some(pending) = self.pending_clusters.pop_front() {
+            self.state = AppState::AutoTagging {
+                cluster: pending.cluster,
+                results: pending.results,
+                selected_idx: 0,
+            };
+        }
+    }
+
+    fn handle_apply(&mut self) {
+        // TODO: do something
+        self.show_next_cluster();
+    }
+
+    fn handle_skip(&mut self) {
+        self.show_next_cluster();
+    }
+
+    fn handle_manual_search(&mut self) {
+        // TODO: Prompt for manual search
+        self.show_next_cluster();
+    }
+
+    fn select_next_match(&mut self) {
+        if let AppState::AutoTagging {
+            results,
+            selected_idx,
+            ..
+        } = &mut self.state
+        {
+            if !results.is_empty() {
+                *selected_idx = (*selected_idx + 1).min(results.len() - 1);
+            }
+        }
+    }
+
+    fn select_previous_match(&mut self) {
+        if let AppState::AutoTagging {
+            results,
+            selected_idx,
+            ..
+        } = &mut self.state
+        {
+            if !results.is_empty() {
+                *selected_idx = selected_idx.saturating_sub(1);
+            }
         }
     }
 

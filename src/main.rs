@@ -4,13 +4,15 @@
 
 use std::{env, path::PathBuf};
 
-use color_eyre::eyre::bail;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
+use color_eyre::eyre::bail;
 
 mod app;
 mod codecs;
+mod credit;
 mod models;
+mod musicbrainz;
 mod scanner;
 mod ui;
 

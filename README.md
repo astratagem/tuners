@@ -15,30 +15,35 @@ Rust.
 
 **Phase 0: Proof of Concept** (In Progress)
 
-This is an early-stage scaffold demonstrating idiomatic Rust project structure for a TUI application. The scaffold is complete and working - MusicBrainz integration is the next major task.
+The core scaffold is complete. MusicBrainz search integration is working. Currently implementing the remaining auto-tagging workflow components (scoring, track mapping, tag writing).
 
 ### What Works Now
 
 - [x] TUI interface with ratatui
-- [x] Parallel directory scanning with live progress (using rayon)
+- [x] Sequential directory scanning with concurrent MusicBrainz searching
 - [x] Metadata extraction from MP3, M4A, and FLAC files
 - [x] Duration calculation from audio streams (MP3, FLAC, M4A)
 - [x] Album clustering based on directory and tags
 - [x] Multi-disc album support with proper track sorting
 - [x] Interactive cluster detail view with track listings
 - [x] Keyboard navigation (j/k, arrows, space, Enter)
+- [x] MusicBrainz API client with rate limiting (1 req/sec)
+- [x] Concurrent scan/search pipeline with bounded queue
+- [x] Basic match result display (artist, title, date, track count)
 
 ### What's Next
 
 See [ROADMAP.md](ROADMAP.md) for the complete development plan.
 
-**Immediate next steps:**
-- Auto-tagging workflow (automatic MusicBrainz search after scan)
+**Immediate next steps (completing auto-tagging workflow):**
 - Similarity scoring algorithm (0-100% match confidence)
-- Interactive prompts for ambiguous matches
-- Track mapping preview before applying changes
+- Track mapping preview showing proposed tag changes
+- Manual search implementation (enter custom artist/album query)
+- Dry-run tag writing (show what would be written without modifying files)
+- Apply functionality (actually write tags to files)
+- Proper handling of NoResults and Error cases
 
-The goal is to replicate beets' core auto-tagging experience: scan → auto-search → prompt only when needed → preview changes.
+The goal is to replicate beets' core auto-tagging experience: scan → auto-search → score matches → prompt → preview changes → apply.
 
 ## Quick Start
 
@@ -92,6 +97,10 @@ src/
   scanner.rs       - Directory scanning and clustering (with rayon parallelism)
   scanner/
     metadata.rs    - Tag extraction by format (MP3, M4A, FLAC)
+  musicbrainz/
+    mod.rs         - Public API and SearchMessage types
+    client.rs      - Rate-limited MusicBrainz API wrapper
+    search.rs      - Search logic with message passing
 ```
 
 ### Design Principles
