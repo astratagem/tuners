@@ -39,7 +39,6 @@ pub enum AppState {
 }
 
 enum ScanMessage {
-    Progress(Vec<AudioFile>, Option<String>),
     Complete(Vec<AudioFile>),
     Error(String),
 }
@@ -98,9 +97,6 @@ impl App {
             && let Ok(message) = rx.try_recv()
         {
             match message {
-                ScanMessage::Progress(files, current) => {
-                    self.update_scan(files, current);
-                }
                 ScanMessage::Complete(files) => {
                     self.complete_scan(files);
                 }

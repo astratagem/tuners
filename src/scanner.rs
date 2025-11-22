@@ -8,6 +8,7 @@ use std::{
 };
 
 use color_eyre::eyre::Result;
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::models::{AlbumCluster, AudioFile};
@@ -25,22 +26,25 @@ const DEFAULT_TOTAL_DISCS: u8 = 1;
 /// Scan a directory recursively for audio files and extract their
 /// metadata.
 pub fn scan_directory(path: &Path) -> Result<Vec<AudioFile>> {
-    let mut files: Vec<AudioFile> = Vec::new();
+    let files: Vec<AudioFile> = WalkDir::new(path)
+        .follow_links(false)
+        .into_iter()
+        .par_bridge()
+        .filter_map(|it| {
+            let entry = it.ok()?;
+            let path = entry.path();
 
-    for entry in WalkDir::new(path).follow_links(false) {
-        let entry = entry?;
-        let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
 
-        if !path.is_file() {
-            continue;
-        }
+            if !is_supported_audio_file(path) {
+                return None;
+            }
 
-        if is_supported_audio_file(path)
-            && let Ok(file) = metadata::extract(path)
-        {
-            files.push(file)
-        }
-    }
+            metadata::extract(path).ok()
+        })
+        .collect();
 
     Ok(files)
 }
