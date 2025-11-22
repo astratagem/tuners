@@ -35,10 +35,10 @@ pub fn scan_directory(path: &Path) -> Result<Vec<AudioFile>> {
             continue;
         }
 
-        if is_supported_audio_file(path) {
-            if let Ok(file) = metadata::extract(path) {
-                files.push(file)
-            }
+        if is_supported_audio_file(path)
+            && let Ok(file) = metadata::extract(path)
+        {
+            files.push(file)
         }
     }
 
@@ -57,7 +57,7 @@ pub fn cluster_files(files: Vec<AudioFile>) -> Vec<AlbumCluster> {
 
     for file in files {
         let key = ClusterKey::from_file(&file);
-        clusters.entry(key).or_insert_with(Vec::new).push(file);
+        clusters.entry(key).or_default().push(file);
     }
 
     clusters
@@ -94,10 +94,7 @@ impl ClusterKey {
             .album
             .clone()
             .unwrap_or_else(|| UNKNOWN_ALBUM_NAME.to_string());
-        let total_discs = file
-            .total_discs
-            .clone()
-            .unwrap_or_else(|| DEFAULT_TOTAL_DISCS as u32);
+        let total_discs = file.total_discs.unwrap_or(DEFAULT_TOTAL_DISCS as u32);
         Self {
             base_path,
             album_artist,

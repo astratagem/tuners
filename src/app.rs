@@ -94,18 +94,18 @@ impl App {
     }
 
     fn handle_messages(&mut self) {
-        if let Some(rx) = &self.scan_rx {
-            if let Ok(message) = rx.try_recv() {
-                match message {
-                    ScanMessage::Progress(files, current) => {
-                        self.update_scan(files, current);
-                    }
-                    ScanMessage::Complete(files) => {
-                        self.complete_scan(files);
-                    }
-                    ScanMessage::Error(msg) => {
-                        self.set_error(msg);
-                    }
+        if let Some(rx) = &self.scan_rx
+            && let Ok(message) = rx.try_recv()
+        {
+            match message {
+                ScanMessage::Progress(files, current) => {
+                    self.update_scan(files, current);
+                }
+                ScanMessage::Complete(files) => {
+                    self.complete_scan(files);
+                }
+                ScanMessage::Error(msg) => {
+                    self.set_error(msg);
                 }
             }
         }
@@ -182,10 +182,9 @@ impl App {
             clusters,
             selected_idx,
         } = &mut self.state
+            && !clusters.is_empty()
         {
-            if !clusters.is_empty() {
-                *selected_idx = (*selected_idx + 1).min(clusters.len() - 1);
-            }
+            *selected_idx = (*selected_idx + 1).min(clusters.len() - 1);
         }
     }
 

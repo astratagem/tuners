@@ -117,10 +117,8 @@ fn render_clusters(
     state.select(Some(selected_idx));
     frame.render_stateful_widget(list, results_area, &mut state);
 
-    let selected_cluster = clusters.get(selected_idx);
-    if selected_cluster.is_some() {
-        let tracklist: Vec<Line> = selected_cluster
-            .unwrap()
+    if let Some(cluster) = clusters.get(selected_idx) {
+        let tracklist: Vec<Line> = cluster
             .tracks
             .iter()
             .map(|it| {
