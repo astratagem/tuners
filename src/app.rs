@@ -10,7 +10,8 @@ use ratatui::{prelude::CrosstermBackend, Terminal};
 
 use crate::{
     models::{AlbumCluster, AudioFile},
-    scanner, ui,
+    scanner::{self, ScanProgress},
+    ui,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(100);
@@ -18,8 +19,9 @@ const TICK_RATE: Duration = Duration::from_millis(100);
 pub struct App {
     state: AppState,
     should_quit: bool,
+    cluster_rx: Option<mpsc::Receiver<AlbumCluster>>,
     scan_rx: Option<mpsc::Receiver<ScanMessage>>,
-    scan_progress_rx: Option<mpsc::Receiver<(usize, String)>>,
+    scan_progress_rx: Option<mpsc::Receiver<ScanProgress>>,
 }
 
 #[derive(Debug)]
@@ -55,6 +57,7 @@ impl App {
                 is_complete: false,
             },
             should_quit: false,
+            cluster_rx: None,
             scan_rx: None,
             scan_progress_rx: None,
         }
@@ -83,26 +86,26 @@ impl App {
     fn start_scan(&mut self) {
         if let AppState::Scanning { path, .. } = &self.state {
             let scan_path = path.clone();
-            let (tx, rx) = mpsc::channel();
-            let (progress_tx, progress_rx) = mpsc::channel::<(usize, String)>();
+            let (cluster_tx, cluster_rx) = mpsc::sync_channel(5);
+            let (progress_tx, progress_rx) = mpsc::channel();
 
-            thread::spawn(
-                move || match scanner::scan_directory(&scan_path, Some(progress_tx)) {
-                    Ok(files) => tx.send(ScanMessage::Complete(files)),
-                    Err(e) => tx.send(ScanMessage::Error(format!("Scan failed: {}", e))),
-                },
-            );
+            thread::spawn(move || {
+                let _ = scanner::scan_directory(&scan_path, cluster_tx, Some(progress_tx));
+            });
 
-            self.scan_rx = Some(rx);
+            self.cluster_rx = Some(cluster_rx);
             self.scan_progress_rx = Some(progress_rx);
         }
     }
 
     fn handle_messages(&mut self) {
         if let Some(rx) = &self.scan_progress_rx {
-            while let Ok((count, path)) = rx.try_recv() {
+            while let Ok(progress) = rx.try_recv() {
                 if let AppState::Scanning { current_file, .. } = &mut self.state {
-                    *current_file = Some(format!("Found {} audio files so far... {}", count, path))
+                    *current_file = Some(format!(
+                        "Scanning: {} ({} clusters found)",
+                        progress.current_dir, progress.clusters_found
+                    ));
                 }
             }
         }

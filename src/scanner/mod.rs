@@ -5,16 +5,12 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        mpsc::Sender,
-        Arc,
-    },
+    sync::mpsc::{Sender, SyncSender},
 };
 
 use color_eyre::eyre::Result;
+use color_eyre::eyre::WrapErr;
 use rayon::prelude::*;
-use walkdir::WalkDir;
 
 use crate::models::{AlbumCluster, AudioFile};
 
@@ -28,40 +24,87 @@ const UNKNOWN_ALBUM_NAME: &str = "Unknown Album";
 
 const DEFAULT_TOTAL_DISCS: u8 = 1;
 
+pub struct ScanProgress {
+    pub current_dir: String,
+    pub clusters_found: usize,
+}
+
 /// Scan a directory recursively for audio files and extract their
 /// metadata.
 pub fn scan_directory(
     path: &Path,
-    progress_tx: Option<Sender<(usize, String)>>,
-) -> Result<Vec<AudioFile>> {
-    let tx = progress_tx.map(Arc::new);
-    let count = Arc::new(AtomicUsize::new(0));
+    cluster_tx: SyncSender<AlbumCluster>,
+    progress_tx: Option<Sender<ScanProgress>>,
+) -> Result<()> {
+    let mut clusters_found = 0;
+    scan_directory_recursive(path, &cluster_tx, &progress_tx, &mut clusters_found)?;
+    Ok(())
+}
 
-    let files: Vec<AudioFile> = WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .par_bridge()
-        .filter_map(|it| {
-            let entry = it.ok()?;
-            let path = entry.path();
+pub fn scan_directory_recursive(
+    path: &Path,
+    cluster_tx: &SyncSender<AlbumCluster>,
+    progress_tx: &Option<Sender<ScanProgress>>,
+    clusters_found: &mut usize,
+) -> Result<()> {
+    let entries =
+        std::fs::read_dir(path).context(format!("Failed to read directory: {}", path.display()))?;
+    let mut files = Vec::new();
+    let mut subdirs = Vec::new();
 
-            if !path.is_file() || !is_supported_audio_file(path) {
-                return None;
+    // Separate files and directories.
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if is_hidden(&path) {
+                continue;
             }
+            subdirs.push(path);
+        } else if path.is_file() && is_supported_audio_file(&path) {
+            files.push(path);
+        }
+    }
 
-            let audio_file = metadata::extract(path).ok();
+    // Process subdirectories first (depth-first).
+    for subdir in subdirs {
+        scan_directory_recursive(&subdir, cluster_tx, progress_tx, clusters_found)?;
+    }
 
-            // Send progress update.
-            if let Some(ref tx) = tx {
-                let n = count.fetch_add(1, Ordering::Relaxed);
-                let _ = tx.send((n * 1, path.display().to_string()));
+    // Process files in the current directory.
+    if !files.is_empty() {
+        let audio_files: Vec<AudioFile> = files
+            .par_iter()
+            .filter_map(|it| metadata::extract(it).ok())
+            .collect();
+
+        if !audio_files.is_empty() {
+            let clusters = cluster_files(audio_files);
+
+            for cluster in clusters {
+                cluster_tx
+                    .send(cluster)
+                    .context("Failed to send cluster to queue")?;
+                *clusters_found += 1;
+                if let Some(tx) = progress_tx {
+                    let _ = tx.send(ScanProgress {
+                        current_dir: path.display().to_string(),
+                        clusters_found: *clusters_found,
+                    });
+                }
             }
+        }
+    }
 
-            audio_file
-        })
-        .collect();
+    Ok(())
+}
 
-    Ok(files)
+fn is_hidden(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.starts_with('.'))
+        .unwrap_or(false)
 }
 
 fn is_supported_audio_file(path: &Path) -> bool {
